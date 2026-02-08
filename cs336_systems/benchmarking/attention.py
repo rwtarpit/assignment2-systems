@@ -34,9 +34,7 @@ def benchmark_attention(compiled: bool = False):
     
     print("Executing on:", device)
     
-    # Handle Global vs Local scope for the compiled function
     if compiled:
-        # Use a local reference to avoid global scope confusion
         current_attn = torch.compile(self_attention_)
         print("Compiling naive attention with torch inductor")
     else:
@@ -54,13 +52,13 @@ def benchmark_attention(compiled: bool = False):
             v = torch.randn(batch_size, seq_len, d_model, device=device, requires_grad=True)
             mask = torch.tril(torch.ones((seq_len, seq_len), device=device)).unsqueeze(0)
 
-            # --- Warmup ---
+            # Warmup
             for _ in range(10):
                 out = current_attn(q, k, v, mask)
                 out.sum().backward()
             torch.cuda.synchronize()
 
-            # --- Benchmark Forward Passes ---
+            # Benchmark Forward Passes
             fwd_total_time = 0.0
             for _ in range(num_iters):
                 torch.cuda.synchronize()
@@ -69,12 +67,12 @@ def benchmark_attention(compiled: bool = False):
                 torch.cuda.synchronize()
                 fwd_total_time += (timeit.default_timer() - start)
 
-            # --- Measure Memory (Activations) ---
+            #  Measure Memory (Activations)
             torch.cuda.reset_peak_memory_stats(device)
             out = current_attn(q, k, v, mask)
             peak_mem_mb = torch.cuda.max_memory_allocated(device) / (1024 ** 2)
 
-            # --- Benchmark Backward Passes ---
+            # Benchmark Backward Pass
             bwd_total_time = 0.0
             for _ in range(num_iters):
                 out_for_bwd = current_attn(q, k, v, mask)
