@@ -18,7 +18,7 @@ class FlashAttention(Function):
         for i in tile_q:
             current_q = q[i:i+1,...]
             output = torch.zeros_like(current_q)
-            l1 = torch.zeros(tile_size)
+            denom = torch.zeros(tile_size)
             max_el = -torch.inf(tile_size)
             
             for j in tile_q:
@@ -27,7 +27,10 @@ class FlashAttention(Function):
                 
                 mat_mul = (current_q@current_k.T)/d_model
                 row_max = torch.max(mat_mul,dim=-1)
+                last_max_el = max_el
                 max_el = torch.max(max_el,row_max)
-                p1 = torch.exp(mat_mul - max_el)  
-                l1 =   
-        
+                numer = torch.exp(mat_mul - max_el)  
+                denom =  torch.exp(last_max_el-max_el)*denom + torch.sum(numer,dim=-1)
+                output = torch.diag(torch.exp(last_max_el-max_el))*output + numer@current_v
+
+            tile_output = 
