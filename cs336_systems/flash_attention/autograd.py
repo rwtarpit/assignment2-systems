@@ -1,6 +1,6 @@
 import torch
 from torch.autograd import Function
-
+from einops import rearrange, einsum, reduce
 
 class FlashAttention(Function):
     "autograd implementation of flash attention"
@@ -22,6 +22,7 @@ class FlashAttention(Function):
         for i in tile_q:
             current_q = q[:,i:i+tile_size,:] # (batch,tile_size,d_model)
             current_tile_size = current_q.shape[1]
+            
             tile_output = torch.zeros_like(current_q) # (batch,tile_size,d_model)
             norm_factor = torch.zeros(q.shape[0],current_tile_size) # (batch,tile_size)
             max_el = torch.full((q.shape[0],current_tile_size),-torch.inf) # (batch,tile_size)
