@@ -2,7 +2,7 @@ import torch
 from torch.autograd import Function
 from einops import rearrange, einsum, reduce
 
-class FlashAttention(Function):
+class FlashAttention_Torch(Function):
     "autograd implementation of flash attention"
     
     @staticmethod
