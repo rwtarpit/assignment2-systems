@@ -14,7 +14,8 @@ def flash_attention_forward(
     scale,
     D : tl.constexpr,
     Q_TILE_SIZE : tl.constexpr,
-    K_TILE_SIZE : tl.constexpr
+    K_TILE_SIZE : tl.constexpr,
+    is_causal : tl.constexpr
 ):
     query_tile_idx = tl.program_id(0)
     batch_idx = tl.program_id(1)
@@ -66,11 +67,17 @@ def flash_attention_forward(
     max_el = tl.full((Q_TILE_SIZE,), value=float("-inf"), dtype=tl.float32)
     norm_factor = tl.zeros((Q_TILE_SIZE,), dtype=tl.float32)
     
-    for _ in range(tl.cdiv(N_keys,K_TILE_SIZE)):
+    for i in range(tl.cdiv(N_keys,K_TILE_SIZE)):
         key_tile = tl.load(K_block_ptr, boundary_check=(0,1), padding_option="zero")
         value_tile = tl.load(V_block_ptr, boundary_check=(0,1), padding_option="zero")
         
         mat_mul = tl.dot(query_tile.to(tl.float16),tl.trans(key_tile).to(tl.float16)) * scale
+        
+        if is_causal:
+            q_indices = tl.arange(0,Q_TILE_SIZE)[:,None] + query_tile_idx*Q_TILE_SIZE 
+            k_indices = tl.arange(0,K_TILE_SIZE)[None,:] + K_TILE_SIZE*i
+            causal_mask = q_indices >= k_indices
+            mat_mul = tl.where(causal_mask, mat_mul, float('-inf'))
         
         row_max = tl.max(mat_mul, axis=1)
         last_max_el = max_el

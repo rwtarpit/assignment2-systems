@@ -16,7 +16,7 @@ class FlashAttention(torch.autograd.Function):
                 v : torch.Tensor,
                 is_causal : bool = False):
         assert q.ndim == 3, "expected (batch*heads,seq_len,d_model) shape input"
-        batch_heads, seq_len, d_model = q.shape, 
+        batch_heads, seq_len, d_model = q.shape 
             
         #q,k,v = rearrange([q,k,v], "batch head seq_len d_model -> (batch head) seq_len d_model")
         # will handle head dim before this kernel, data entry will be [(batch*head),seq_len,d_model]
@@ -42,11 +42,13 @@ class FlashAttention(torch.autograd.Function):
             output.stride(0), output.stride(1), output.stride(2),
             log_sum_exp.stride(0), log_sum_exp.stride(1),
             N_queries, N_keys, scale, D,
-            ctx.Q_TILE_SIZE, ctx.K_TILE_SIZE
+            ctx.Q_TILE_SIZE, ctx.K_TILE_SIZE,
+            is_causal
         )
         
         ctx.save_for_backward(q, k, v, output, log_sum_exp)
         ctx.scale = scale
+        ctx.is_causal = is_causal
         return output
     
     @staticmethod
