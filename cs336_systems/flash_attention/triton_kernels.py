@@ -53,18 +53,18 @@ def flash_attention_forward(
                                 )
     
     L_block_ptr = tl.make_block_ptr(base=l_ptr + batch_idx*stride_lb,
-                                    shape=(Q_TILE_SIZE),
-                                    strides=(stride_lq),
-                                    offsets=(query_tile_idx*Q_TILE_SIZE),
-                                    block_shape=(Q_TILE_SIZE),
-                                    order=(1,)
+                                    shape=(N_queries,),
+                                    strides=(stride_lq,),
+                                    offsets=(query_tile_idx*Q_TILE_SIZE,),
+                                    block_shape=(Q_TILE_SIZE,),
+                                    order=(0,)
                                 )
     
     tile_output = tl.zeros((Q_TILE_SIZE,D), dtype=tl.float32)
     query_tile = tl.load(Q_block_ptr, boundary_check=(0,1), padding_option="zero")
     
-    max_el = tl.full((Q_TILE_SIZE), value=float("-inf"), dtype=tl.float32)
-    norm_factor = tl.zeros((Q_TILE_SIZE), dtype=tl.float32)
+    max_el = tl.full((Q_TILE_SIZE,), value=float("-inf"), dtype=tl.float32)
+    norm_factor = tl.zeros((Q_TILE_SIZE,), dtype=tl.float32)
     
     for _ in range(tl.cdiv(N_keys,K_TILE_SIZE)):
         key_tile = tl.load(K_block_ptr, boundary_check=(0,1), padding_option="zero")

@@ -1,6 +1,7 @@
 import torch
 import triton
 import triton.language as tl
+import math
 
 from triton_kernels import flash_attention_forward
 from einops import rearrange
@@ -14,8 +15,8 @@ class FlashAttention(torch.autograd.Function):
                 k : torch.Tensor,
                 v : torch.Tensor,
                 is_causal : bool = False):
-        assert q.ndim == 3 
-        batch_heads, seq_len, d_model = q.shape, "expected (batch*heads,seq_len,d_model) shape input"
+        assert q.ndim == 3, "expected (batch*heads,seq_len,d_model) shape input"
+        batch_heads, seq_len, d_model = q.shape, 
             
         #q,k,v = rearrange([q,k,v], "batch head seq_len d_model -> (batch head) seq_len d_model")
         # will handle head dim before this kernel, data entry will be [(batch*head),seq_len,d_model]
@@ -27,12 +28,12 @@ class FlashAttention(torch.autograd.Function):
         ctx.input_shape = q.shape
         
         N_queries, N_keys, D = q.shape[1], k.shape[1], q.shape[-1]
-        scale = 1/D**-0.5
+        scale = 1/(D**0.5)
         
         output = torch.empty_like(q)
         log_sum_exp = torch.empty((batch_heads,seq_len), device=q.device, dtype=torch.float32)
         
-        flash_attention_forward[(tl.cdiv(seq_len,ctx.Q_TILE_SIZE),batch_heads)](
+        flash_attention_forward[(math.ceil(seq_len/ctx.Q_TILE_SIZE),batch_heads)](
             q,k,v,
             output,log_sum_exp,
             q.stride(0), q.stride(1), q.stride(2),
