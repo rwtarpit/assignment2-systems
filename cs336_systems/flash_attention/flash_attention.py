@@ -8,7 +8,7 @@ from einops import rearrange
 
 
 class FlashAttention(torch.autograd.Function):
-    
+    """https://lubits.ch/flash/"""
     @staticmethod
     def forward(ctx,
                 q : torch.Tensor, 

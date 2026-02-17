@@ -51,5 +51,21 @@ class FlashAttention_Torch(Function):
     
     
     @staticmethod
-    def backward(ctx, grad_output):
-        raise NotImplementedError
+    def backward(ctx, grad_output : torch.Tensor):
+        q, k, v, O, L = ctx.saved_tensors
+        device = grad_output.device
+        
+        dQ = torch.zeros_like(q) # (batch,seq_len,d_model)
+        dK = torch.zeros_like(k)
+        dV = torch.zeros_like(v)
+        
+        D = torch.sum(grad_output*O, dim=-1) # (batch,seq_len)
+        tile_size = 32
+        tile_q = torch.arange(0,q.shape[1],tile_size) 
+        
+        for i in tile_q:
+            query_tile = q[:,i:i+tile_size,:] # (batch,tile_d_model)
+            O_tile = O[:,i:i+tile_size,:]
+            dO_tile = grad_output[:,i:i+tile_size,:]
+            
+            
