@@ -1,9 +1,9 @@
 import torch
 import triton
 import triton.language as tl
-import math
 
-from triton_kernels import flash_attention_forward
+
+from triton_kernels import flash_attention_forward, flash_attention_backward, compute_D_kernel
 from einops import rearrange
 
 
@@ -33,7 +33,7 @@ class FlashAttention(torch.autograd.Function):
         output = torch.empty_like(q)
         log_sum_exp = torch.empty((batch_heads,seq_len), device=q.device, dtype=torch.float32)
         
-        flash_attention_forward[(math.ceil(seq_len/ctx.Q_TILE_SIZE),batch_heads)](
+        flash_attention_forward[(triton.cdiv(seq_len,ctx.Q_TILE_SIZE),batch_heads)](
             q,k,v,
             output,log_sum_exp,
             q.stride(0), q.stride(1), q.stride(2),
@@ -53,7 +53,42 @@ class FlashAttention(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx, grad_output):
-        raise NotImplementedError
+        q,k,v,output,log_sum_exp = ctx.saved_tensors
+        scale = ctx.scale
+        Q_TILE_SIZE = ctx.Q_TILE_SIZE
+        K_TILE_SIZE = ctx.K_TILE_SIZE
+        batch_heads_K, N_keys, D_model = k.shape
+        batch_heads_Q, N_queries, _ = q.shape
         
+        D = torch.empty((batch_heads_Q,N_queries), dtype=torch.float32, device=q.device)
+        dQ = torch.zeros_like(q)
+        dK = torch.empty_like(k)
+        dV = torch.empty_like(v)
+        
+        BLOCK_SIZE_D = triton.next_power_of_2(D_model)
+        
+        compute_D_kernel[(N_queries,batch_heads_Q)](
+            output, grad_output, D,
+            output.stride(0), output.stride(1), output.stride(2),
+            D.stride(0), D.stride(1),
+            N_queries, D_model, BLOCK_SIZE_D
+        )
+        
+        flash_attention_backward[(triton.cdiv(N_keys,K_TILE_SIZE),batch_heads_K)](
+            grad_output, output, q, k, v, log_sum_exp,
+            D, dQ, dK, dV,
+            output.stride(0), output.stride(1), output.stride(2),
+            q.stride(0), q.stride(1), q.stride(2),
+            k.stride(0), k.stride(1), k.stride(2),
+            v.stride(0), v.stride(1), v.stride(2),
+            log_sum_exp.stride(0), log_sum_exp.stride(1),
+            D.stride(0), D.stride(1),
+            N_queries, N_keys,
+            scale, D_model,
+            Q_TILE_SIZE, K_TILE_SIZE,
+            ctx.is_causal   
+        )
+        
+        return dQ, dK, dV, None
         
         

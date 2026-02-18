@@ -114,7 +114,8 @@ def flash_attention_backward(
     scale,
     D : tl.constexpr,
     Q_TILE_SIZE : tl.constexpr,
-    K_TILE_SIZE : tl.constexpr,      
+    K_TILE_SIZE : tl.constexpr,
+    is_causal : tl.constexpr      
     ):
     kv_tile_id = tl.program_id(0)
     batch_idx = tl.program_id(1)
