@@ -200,7 +200,20 @@ def flash_attention_backward(
     K_tile_T = tl.trans(K_tile)
     V_tile_T = tl.trans(V_tile)
     
-    for i in range(tl.cdiv(N_queries,Q_TILE_SIZE)):
+    if is_causal:
+        start_q_tile = (kv_tile_id * K_TILE_SIZE) // Q_TILE_SIZE
+        total_q_tiles = tl.cdiv(N_queries, Q_TILE_SIZE)
+        
+        Q_block_ptr = Q_block_ptr.advance((start_q_tile * Q_TILE_SIZE, 0))
+        dO_block_ptr = dO_block_ptr.advance((start_q_tile * Q_TILE_SIZE, 0))
+        L_block_ptr = L_block_ptr.advance((start_q_tile * Q_TILE_SIZE,))
+        D_block_ptr = D_block_ptr.advance((start_q_tile * Q_TILE_SIZE,))
+        
+        start, end = start_q_tile, total_q_tiles
+    else:
+        start, end = 0, tl.cdiv(N_queries, Q_TILE_SIZE)
+    
+    for i in range(start,end):
         Q_tile = tl.load(Q_block_ptr, boundary_check=(0,1), padding_option="zero")
         dO_tile = tl.load(dO_block_ptr, boundary_check=(0,1), padding_option="zero")
         L_tile = tl.load(L_block_ptr, boundary_check=(0,), padding_option="zero")
