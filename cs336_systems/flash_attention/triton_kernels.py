@@ -67,7 +67,15 @@ def flash_attention_forward(
     max_el = tl.full((Q_TILE_SIZE,), value=float("-inf"), dtype=tl.float32)
     norm_factor = tl.zeros((Q_TILE_SIZE,), dtype=tl.float32)
     
-    for i in range(tl.cdiv(N_keys,K_TILE_SIZE)):
+    if is_causal:
+        num_k_tiles = tl.cdiv((query_tile_idx + 1) * Q_TILE_SIZE, K_TILE_SIZE)
+        total_k_tiles = tl.cdiv(N_keys, K_TILE_SIZE)
+        loop_range = tl.minimum(num_k_tiles, total_k_tiles)
+    else:
+        loop_range = tl.cdiv(N_keys, K_TILE_SIZE)
+        
+    
+    for i in range(loop_range):
         key_tile = tl.load(K_block_ptr, boundary_check=(0,1), padding_option="zero")
         value_tile = tl.load(V_block_ptr, boundary_check=(0,1), padding_option="zero")
         
@@ -197,7 +205,14 @@ def flash_attention_backward(
         dO_tile = tl.load(dO_block_ptr, boundary_check=(0,1), padding_option="zero")
         L_tile = tl.load(L_block_ptr, boundary_check=(0,), padding_option="zero")
         
-        S_tile = tl.dot(Q_tile,K_tile_T)/scale
+        S_tile = tl.dot(Q_tile,K_tile_T)*scale
+        
+        if is_causal:
+            q_indices = tl.arange(0,Q_TILE_SIZE)[:,None] + Q_TILE_SIZE*i 
+            k_indices = tl.arange(0,K_TILE_SIZE)[None,:] + K_TILE_SIZE*kv_tile_id
+            causal_mask = q_indices >= k_indices
+            S_tile = tl.where(causal_mask, S_tile, float('-inf'))
+        
         P_tile = tl.exp(S_tile-L_tile[:,None])
         dP_tile = tl.dot(dO_tile.to(tl.float16), V_tile_T.to(tl.float16))
         
