@@ -229,8 +229,8 @@ def flash_attention_backward(
         P_tile = tl.exp(S_tile-L_tile[:,None])
         dP_tile = tl.dot(dO_tile.to(tl.float16), V_tile_T.to(tl.float16))
         
-        D_tile = tl.load(D_block_ptr, boundary_check=(0,1), padding_option="zero")
-        dS_tile = P_tile * (dP_tile - D_tile[:,None])/scale
+        D_tile = tl.load(D_block_ptr, boundary_check=(0,), padding_option="zero")
+        dS_tile = P_tile * (dP_tile - D_tile[:,None])*scale
         
         dV_tile = tl.dot(tl.trans(P_tile).to(tl.float16), dO_tile.to(tl.float16), acc=dV_tile)
         dK_tile = tl.dot(tl.trans(dS_tile).to(tl.float16), Q_tile.to(tl.float16), acc=dK_tile)
